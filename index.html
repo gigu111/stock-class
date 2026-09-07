@@ -7,6 +7,8 @@
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS CDN (WebRTC P2P 통신 라이브러리) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   
   <!-- Google Fonts: Noto Sans KR -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,14 +45,14 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-bold text-slate-900" id="headerTitle">우리 조 모의투자 단말기</h1>
-            <!-- 조 배정 상태 배지 (학생 변경 불가 / 강사 고정) -->
+            <!-- 조 배정 상태 배지 -->
             <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1 border border-slate-200" id="myTeamBadge">
               <span>🔒</span> <span id="myTeamBadgeText">배정 대기 중</span>
             </span>
           </div>
-          <p class="text-xs text-emerald-600 font-medium flex items-center gap-1" id="connectionStatusText">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            강사 관제실 실시간 연결됨
+          <p class="text-xs text-amber-600 font-medium flex items-center gap-1" id="connectionStatusText">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" id="statusDot"></span>
+            <span id="statusMessage">강사 관제실 P2P 연결 시도 중...</span>
           </p>
         </div>
       </div>
@@ -72,10 +74,15 @@
   </header>
 
   <!-- ==================== 강사 송출 속보 티커 ==================== -->
-  <div class="bg-indigo-900 text-indigo-100 px-4 py-2 text-xs flex items-center gap-3 border-b border-indigo-950">
-    <span class="bg-indigo-700 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px] shrink-0">MARKET NEWS</span>
-    <div class="truncate font-medium" id="studentNewsTicker">
-      강사 관제 화면에서 투자 시작을 누르면 시세와 뉴스가 시작됩니다.
+  <div class="bg-indigo-900 text-indigo-100 px-4 py-2 text-xs flex items-center justify-between gap-3 border-b border-indigo-950">
+    <div class="flex items-center gap-2 truncate">
+      <span class="bg-indigo-700 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px] shrink-0">MARKET NEWS</span>
+      <div class="truncate font-medium" id="studentNewsTicker">
+        강사 관제 화면에서 투자 시작을 누르면 시세와 뉴스가 시작됩니다.
+      </div>
+    </div>
+    <div class="text-[11px] text-indigo-300 shrink-0 font-mono hidden sm:block">
+      ROOM: <span id="displayRoomCode" class="text-white font-bold">stock-class-room-01</span>
     </div>
   </div>
 
@@ -309,34 +316,18 @@
     <span id="toastMsg">알림 메시지</span>
   </div>
 
-  <!-- ==================== Firebase & 비즈니스 로직 ==================== -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    // 1. Firebase 환경 초기화
-    const firebaseConfig = typeof __firebase_config !== 'undefined'
-      ? JSON.parse(__firebase_config)
-      : {
-          apiKey: "AIzaSyMockKeyForStockEducation2026",
-          authDomain: "stock-education.firebaseapp.com",
-          projectId: "stock-education-classroom",
-          storageBucket: "stock-education.appspot.com",
-          messagingSenderId: "100000000000",
-          appId: "1:100000000000:web:mockappid12345"
-        };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'stock-class-app';
-
-    let currentUser = null;
-    let myTeamId = null; // 초기에는 미배정 상태
+  <!-- ==================== P2P WebRTC 비즈니스 로직 ==================== -->
+  <script>
+    // 1. 기본 상태 변수
+    let myTeamId = null;
     let currentOrderType = 'BUY';
     const INITIAL_CASH = 1000000;
     const MASTER_PIN = "1234";
+
+    // URL 파라미터에서 룸 ID 추출 (미지정 시 기본 룸 ID 사용)
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room') || 'stock-class-room-01';
+    document.getElementById('displayRoomCode').innerText = roomCode;
 
     // 단말기 고유 ID 생성 (세션 유지)
     let deviceId = sessionStorage.getItem('stock_device_id');
@@ -346,6 +337,7 @@
     }
     document.getElementById('displayDeviceId').innerText = `#${deviceId}`;
 
+    // 종목 데이터 기본값
     let stocks = [
       { id: 'ai', name: '넥스트AI', category: 'AI·로봇', price: 50000, change: 0, changeRate: 0 },
       { id: 'eco', name: '에코그린', category: '친환경 배터리', price: 20000, change: 0, changeRate: 0 },
@@ -353,6 +345,7 @@
       { id: 'food', name: '스타푸드', category: 'K-간식·푸드', price: 5000, change: 0, changeRate: 0 }
     ];
 
+    // 조별 상태 기본값
     let teams = {
       1: { id: 1, name: '1조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } },
       2: { id: 2, name: '2조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } },
@@ -362,14 +355,155 @@
 
     let allTransactions = [];
 
-    // 2. 조 배정 판별 로직 (방식 1: URL 파라미터 확인)
+    // 2. PeerJS P2P 연결 객체
+    let peer = null;
+    let conn = null; // 강사와의 DataConnection
+    let isConnectedToTeacher = false;
+    let reconnectTimer = null;
+
+    const teacherPeerId = `stock-teacher-${roomCode}`;
+    const myPeerId = `stock-student-${deviceId}-${Date.now().toString().slice(-4)}`;
+
+    function initPeerConnection() {
+      // PeerJS 인스턴스 생성 (무료 공용 STUN/시그널링 서버 사용)
+      peer = new Peer(myPeerId, {
+        debug: 1
+      });
+
+      peer.on('open', (id) => {
+        connectToTeacherHost();
+      });
+
+      peer.on('error', (err) => {
+        setConnectionStatus(false, 'P2P 시그널링 재시도 중...');
+        scheduleReconnect();
+      });
+    }
+
+    function connectToTeacherHost() {
+      if (!peer || peer.destroyed) return;
+
+      setConnectionStatus(false, '강사 관제실 연결 시도 중...');
+      conn = peer.connect(teacherPeerId, { reliable: true });
+
+      conn.on('open', () => {
+        isConnectedToTeacher = true;
+        setConnectionStatus(true, '강사 관제실 P2P 직결됨');
+
+        // 강사에게 접속 보고 (단말기 ID 및 조 정보 전달)
+        conn.send({
+          type: 'STUDENT_JOIN',
+          payload: {
+            deviceId,
+            teamId: myTeamId
+          }
+        });
+      });
+
+      conn.on('data', (data) => {
+        handleTeacherMessage(data);
+      });
+
+      conn.on('close', () => {
+        isConnectedToTeacher = false;
+        setConnectionStatus(false, '강사 연결 끊김. 재연결 중...');
+        scheduleReconnect();
+      });
+
+      conn.on('error', () => {
+        isConnectedToTeacher = false;
+        scheduleReconnect();
+      });
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        if (!isConnectedToTeacher) {
+          connectToTeacherHost();
+        }
+      }, 3000);
+    }
+
+    function setConnectionStatus(connected, message) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusMessage');
+      const container = document.getElementById('connectionStatusText');
+
+      text.innerText = message;
+      if (connected) {
+        container.className = 'text-xs text-emerald-600 font-medium flex items-center gap-1';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+      } else {
+        container.className = 'text-xs text-amber-600 font-medium flex items-center gap-1';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
+      }
+    }
+
+    // 3. 강사 화면으로부터의 메시지 수신 처리
+    function handleTeacherMessage(data) {
+      if (!data || !data.type) return;
+
+      switch (data.type) {
+        case 'MARKET_STATE_UPDATE':
+          // 강사 대시보드의 실시간 시장 데이터 수신
+          if (data.payload.stocks) {
+            stocks = data.payload.stocks;
+            initStockSelect();
+          }
+          if (data.payload.teams) {
+            teams = data.payload.teams;
+          }
+          if (typeof data.payload.remainingSeconds === 'number') {
+            document.getElementById('studentTimer').innerText = formatTime(data.payload.remainingSeconds);
+          }
+          if (data.payload.news) {
+            document.getElementById('studentNewsTicker').innerText = data.payload.news;
+          }
+          renderAll();
+          break;
+
+        case 'ASSIGN_TEAM':
+          // 강사가 원격으로 조를 지정한 경우
+          if (data.payload.deviceId === deviceId && data.payload.teamId) {
+            applyTeamAssignment(data.payload.teamId, '강사 원격 지정');
+          }
+          break;
+
+        case 'ORDER_RESULT':
+          // 제출한 주문의 체결/거절 결과 수신
+          if (data.payload.teamId === myTeamId) {
+            const tx = data.payload.transaction;
+            allTransactions.unshift(tx);
+            renderMyTxLogs();
+            renderMyAssetSummary();
+
+            if (data.payload.isSuccess) {
+              showToast(`[체결 성공] ${tx.stockName} ${tx.quantity}주가 정상 체결되었습니다!`);
+            } else {
+              showToast(`[체결 실패] ${tx.note}`, 'error');
+            }
+          }
+          break;
+
+        case 'SYNC_ALL_TRANSACTIONS':
+          // 전체 원장 동기화
+          if (Array.isArray(data.payload)) {
+            allTransactions = data.payload;
+            renderMyTxLogs();
+            renderMyAssetSummary();
+          }
+          break;
+      }
+    }
+
+    // 4. 조 배정 확인
     function checkUrlAssignment() {
-      const urlParams = new URLSearchParams(window.location.search);
       const teamParam = urlParams.get('team') || urlParams.get('t');
       if (teamParam) {
         const parsed = parseInt(teamParam, 10);
         if ([1, 2, 3, 4].includes(parsed)) {
-          applyTeamAssignment(parsed, 'URL 파라미터 지정');
+          applyTeamAssignment(parsed, 'URL 파라미터');
           return true;
         }
       }
@@ -387,110 +521,19 @@
 
       renderAll();
       showToast(`[${teamNum}조]로 배정되었습니다! (${source})`);
-    }
 
-    // 3. 인증 실행
-    async function initAuth() {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        currentUser = { uid: 'student-team-user' };
-        setupFirestoreListeners();
-      }
-    }
-
-    onAuthStateChanged(auth, (user) => {
-      currentUser = user;
-      if (user) {
-        setupFirestoreListeners();
-        registerDeviceToCloud();
-      }
-    });
-
-    initAuth();
-
-    // 단말기를 클라우드 DB에 등록 (강사 원격 배정용)
-    async function registerDeviceToCloud() {
-      if (!currentUser) return;
-      const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
-      try {
-        await setDoc(deviceDocRef, {
-          deviceId,
-          teamId: myTeamId || null,
-          lastActive: Date.now()
-        }, { merge: true });
-      } catch (e) {}
-    }
-
-    // 4. Firestore 실시간 리스너 (RULE 1, RULE 2 준수)
-    function setupFirestoreListeners() {
-      if (!currentUser) return;
-
-      // (1) 시장 상태 리스너: 주가/타이머/뉴스 수신
-      const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
-      onSnapshot(marketDocRef, (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data.stocks) {
-            stocks = data.stocks;
-            initStockSelect();
-          }
-          if (typeof data.remainingSeconds === 'number') {
-            document.getElementById('studentTimer').innerText = formatTime(data.remainingSeconds);
-          }
-          if (data.news) {
-            document.getElementById('studentNewsTicker').innerText = data.news;
-          }
-          renderAll();
-        }
-      }, () => {});
-
-      // (2) 단말기 배정 리스너: 강사가 클라우드에서 배정한 조 실시간 감지 (방식 2)
-      const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
-      onSnapshot(deviceDocRef, (snap) => {
-        if (snap.exists()) {
-          const dData = snap.data();
-          if (dData.teamId && [1, 2, 3, 4].includes(dData.teamId)) {
-            if (myTeamId !== dData.teamId) {
-              applyTeamAssignment(dData.teamId, '클라우드 원격 배정');
-            }
-          }
-        }
-      }, () => {});
-
-      // (3) 조별 잔고 상태 리스너
-      const teamsCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'teams');
-      onSnapshot(teamsCollRef, (snap) => {
-        snap.forEach((docSnap) => {
-          const tData = docSnap.data();
-          if (tData && tData.id) {
-            teams[tData.id] = tData;
-          }
+      // 강사에게 배정된 조 정보 재전송
+      if (conn && conn.open) {
+        conn.send({
+          type: 'STUDENT_TEAM_UPDATED',
+          payload: { deviceId, teamId: myTeamId }
         });
-        renderAll();
-      }, () => {});
-
-      // (4) 전체 거래 원장 리스너
-      const txCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
-      onSnapshot(txCollRef, (snap) => {
-        const txList = [];
-        snap.forEach((docSnap) => {
-          txList.push(docSnap.data());
-        });
-        txList.sort((a, b) => (b.timestamp || b.id || 0) - (a.timestamp || a.id || 0));
-        allTransactions = txList;
-        renderMyTxLogs();
-        renderMyAssetSummary();
-      }, () => {});
+      }
     }
 
     // 5. 화면 렌더링
     function renderAll() {
-      if (!myTeamId) return; // 미배정 시 대기
+      if (!myTeamId) return;
       renderMyAssetSummary();
       renderStockCards();
       renderMyHoldingsTable();
@@ -652,71 +695,34 @@
       document.getElementById('valOrderTotal').innerText = formatKRW(stock.price * qty);
     }
 
-    // 6. 주문 전송 로직
-    document.getElementById('btnSubmitOrder').addEventListener('click', async () => {
-      if (!currentUser) return showToast('데이터베이스 연결 중입니다.', 'error');
-      if (!myTeamId) return showToast('조 배정이 완료되지 않았습니다.', 'error');
+    // 6. 강사 화면으로 주문 패킷 P2P 직접 전송
+    document.getElementById('btnSubmitOrder').addEventListener('click', () => {
+      if (!conn || !conn.open) {
+        return showToast('강사 관제 화면과 P2P 연결되지 않았습니다. 잠시 기다려 주세요.', 'error');
+      }
+      if (!myTeamId) {
+        return showToast('조 배정이 완료되지 않았습니다.', 'error');
+      }
 
-      const team = teams[myTeamId];
       const stockId = document.getElementById('selectStock').value;
       const stock = stocks.find(s => s.id === stockId);
       const qty = parseInt(document.getElementById('inputQty').value, 10);
 
       if (!qty || qty <= 0) return showToast('수량을 1주 이상 입력하세요.', 'error');
 
-      const totalCost = stock.price * qty;
-      const curTime = document.getElementById('studentTimer').innerText;
-      let isSuccess = false;
-      let note = '정상 체결';
-
-      // 거래 유효성 검사
-      if (currentOrderType === 'BUY') {
-        if (team.cash >= totalCost) {
-          team.cash -= totalCost;
-          if (!team.holdings) team.holdings = {};
-          team.holdings[stockId] = (team.holdings[stockId] || 0) + qty;
-          isSuccess = true;
-        } else {
-          isSuccess = false;
-          note = `[실패] 잔액 부족 (부족액: ${formatKRW(totalCost - team.cash)})`;
+      // 주문 요청 메시지 송신 (강사 화면에서 잔액/수량 검증 후 원장에 기록 및 브로드캐스트)
+      conn.send({
+        type: 'SUBMIT_ORDER',
+        payload: {
+          teamId: myTeamId,
+          stockId,
+          orderType: currentOrderType,
+          quantity: qty,
+          deviceId
         }
-      } else {
-        const holding = team.holdings?.[stockId] || 0;
-        if (holding >= qty) {
-          team.cash += totalCost;
-          team.holdings[stockId] -= qty;
-          isSuccess = true;
-        } else {
-          isSuccess = false;
-          note = `[실패] 보유 수량 부족 (보유: ${holding}주, 주문: ${qty}주)`;
-        }
-      }
-
-      if (isSuccess) {
-        const teamDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'teams', String(myTeamId));
-        await setDoc(teamDocRef, team);
-      }
-
-      const txCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
-      await addDoc(txCollRef, {
-        timestamp: Date.now(),
-        time: curTime,
-        teamId: myTeamId,
-        teamName: `${myTeamId}조`,
-        type: currentOrderType === 'BUY' ? '매수' : '매도',
-        stockName: stock.name,
-        price: stock.price,
-        quantity: qty,
-        totalAmount: totalCost,
-        status: isSuccess ? '성공' : '실패',
-        note
       });
 
-      if (isSuccess) {
-        showToast(`[주문 체결] ${stock.name} ${qty}주 정상 체결되었습니다!`);
-      } else {
-        showToast(`[거래 실패] ${note}`, 'error');
-      }
+      showToast(`[${stock.name}] ${qty}주 ${currentOrderType === 'BUY' ? '매수' : '매도'} 주문을 전송했습니다...`);
     });
 
     function renderMyTxLogs() {
@@ -749,7 +755,7 @@
       });
     }
 
-    // 7. 강사 마스터 PIN 인증 모달 로직 (방식 3)
+    // 7. 강사 마스터 PIN 인증 모달
     const pinModal = document.getElementById('teacherPinModal');
     function openPinModal() {
       document.getElementById('inputTeacherPin').value = '';
@@ -764,7 +770,7 @@
     document.getElementById('btnClosePinModal').addEventListener('click', closePinModal);
     document.getElementById('btnCancelPin').addEventListener('click', closePinModal);
 
-    document.getElementById('btnApplyPinAssignment').addEventListener('click', async () => {
+    document.getElementById('btnApplyPinAssignment').addEventListener('click', () => {
       const pin = document.getElementById('inputTeacherPin').value;
       if (pin !== MASTER_PIN) {
         return showToast('마스터 PIN 번호가 일치하지 않습니다.', 'error');
@@ -772,12 +778,6 @@
       const selectedTeam = parseInt(document.getElementById('selectPinTeam').value, 10);
       applyTeamAssignment(selectedTeam, '강사 PIN 직접 배정');
       closePinModal();
-
-      // DB에도 업데이트 저장
-      if (currentUser) {
-        const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
-        await setDoc(deviceDocRef, { deviceId, teamId: selectedTeam, lastActive: Date.now() }, { merge: true });
-      }
     });
 
     function formatKRW(val) {
@@ -805,9 +805,10 @@
       }, 3000);
     }
 
-    // 초기 실행
+    // 초기화 실행
     initStockSelect();
     checkUrlAssignment();
+    initPeerConnection();
   </script>
 </body>
 </html>
