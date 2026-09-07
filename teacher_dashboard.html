@@ -45,12 +45,12 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-base sm:text-lg font-bold">주식투자 데이터 교실 [교사용 통합 관제실]</h1>
-            <span class="text-xs bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1" id="syncStatusBadge">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" id="hostStatusDot"></span>
-              <span id="hostStatusText">실시간 동기화 준비 완료</span>
+            <span class="text-xs bg-slate-800 text-slate-300 font-semibold px-2.5 py-0.5 rounded-full border border-slate-700 flex items-center gap-1.5" id="syncStatusBadge">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="hostStatusDot"></span>
+              <span id="hostStatusText">실시간 동기화 채널 가동 중</span>
             </span>
           </div>
-          <p class="text-xs text-slate-400 hidden sm:block">실시간 관제 · 난수 주가 변동 송출 · 원장 통합 집계 · AI 결산 리포트</p>
+          <p class="text-xs text-slate-400 hidden sm:block">실시간 관제 · 주가 변동 송출 · 원장 통합 집계 · AI 결산 리포트</p>
         </div>
       </div>
 
@@ -59,7 +59,7 @@
         <!-- 룸 코드 & 접속 단말기 현황 버튼 -->
         <button id="btnOpenDeviceManager" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5">
           <span>📱 단말기 관리</span>
-          <span id="connectedCountBadge" class="bg-blue-600 text-white text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold">0대</span>
+          <span id="connectedCountBadge" class="bg-blue-600 text-white text-[11px] font-mono px-2 py-0.2 rounded-full font-bold">0대</span>
         </button>
 
         <div class="flex items-center gap-2 bg-slate-800 px-3.5 py-1.5 rounded-xl border border-slate-700 font-mono">
@@ -109,11 +109,11 @@
   <!-- ==================== 메인 관제 콘텐츠 ==================== -->
   <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1">
 
-    <!-- [구역 1] 전 조 실시간 시세 및 시장 현황 -->
+    <!-- [구역 1] 전 종목 실시간 시세표 -->
     <section>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
-          <span>🏢</span> 실시간 전 종목 시세표 (학생 단말기에 실시간 전송 중)
+          <span>🏢</span> 실시간 전 종목 시세표 (학생 단말기 실시간 연동)
         </h2>
         <span class="text-xs text-slate-500 font-medium">자동 변동 주기: 30초</span>
       </div>
@@ -347,16 +347,15 @@
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // 1. Firebase 및 환경 변수 바인딩
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'stock-class-app';
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-    const apiKey = ""; // Gemini API 키 (실행 환경 자동 주입)
+    const apiKey = "";
 
-    let app = null;
-    let auth = null;
-    let db = null;
-    let currentUser = null;
+    let firebaseConfig = null;
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+      try { firebaseConfig = JSON.parse(__firebase_config); } catch (e) {}
+    }
 
+    let app = null, auth = null, db = null, currentUser = null;
     if (firebaseConfig) {
       try {
         app = initializeApp(firebaseConfig);
@@ -365,10 +364,9 @@
       } catch (e) {}
     }
 
-    // 로컬 브라우저 탭 간 BroadcastChannel 지원
+    // 로컬 탭 간 양방향 동기화 채널
     const localChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('STOCK_CLASS_CHANNEL') : null;
 
-    // URL 파라미터에서 room 코드 추출
     const urlParams = new URLSearchParams(window.location.search);
     const roomCode = urlParams.get('room') || 'stock-class-room-01';
     document.getElementById('displayRoomCode').innerText = roomCode;
@@ -400,7 +398,7 @@
     let stocks = JSON.parse(JSON.stringify(defaultStocks));
     let teams = JSON.parse(JSON.stringify(defaultTeams));
     let transactions = [];
-    let connectedDevices = new Map(); // deviceId -> { deviceId, teamId, lastActive }
+    let connectedDevices = new Map();
 
     const TOTAL_SECONDS = 20 * 60;
     let remainingSeconds = TOTAL_SECONDS;
@@ -408,9 +406,8 @@
     let isTimerRunning = false;
     let rankingChartInstance = null;
 
-    // 2. 인증 및 Firestore 리스너 (RULE 3 & RULE 1 준수)
     async function initAuthAndData() {
-      if (auth) {
+      if (auth && db) {
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -422,14 +419,15 @@
         onAuthStateChanged(auth, (user) => {
           currentUser = user;
           if (user && db) {
+            document.getElementById('hostStatusDot').className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+            document.getElementById('hostStatusText').innerText = '클라우드 DB 실시간 연결됨';
             setupFirestoreListeners();
-            saveMarketState();
-            saveTeamsState();
+            broadcastMarketState();
           }
         });
       } else {
-        // Firebase가 없을 때 로컬 모드로 작동
-        document.getElementById('hostStatusText').innerText = '로컬 채널 동기화 모드';
+        document.getElementById('hostStatusDot').className = 'w-2 h-2 rounded-full bg-blue-400 animate-pulse';
+        document.getElementById('hostStatusText').innerText = '로컬 채널 실시간 모드';
       }
 
       setupLocalChannel();
@@ -438,7 +436,6 @@
     function setupFirestoreListeners() {
       if (!currentUser || !db) return;
 
-      // 1) 시장 상태 리스너
       const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
       onSnapshot(marketDocRef, (snap) => {
         if (snap.exists()) {
@@ -454,7 +451,6 @@
         }
       }, () => {});
 
-      // 2) 조별 상태 리스너
       const teamsCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'teams');
       onSnapshot(teamsCollRef, (snap) => {
         snap.forEach((dSnap) => {
@@ -464,26 +460,20 @@
         renderTeamRanks();
       }, () => {});
 
-      // 3) 전체 거래 원장 리스너 (RULE 2: 복합 쿼리 배제, 메모리 정렬)
       const txCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
       onSnapshot(txCollRef, (snap) => {
         const txList = [];
-        snap.forEach((dSnap) => {
-          txList.push(dSnap.data());
-        });
+        snap.forEach((dSnap) => txList.push(dSnap.data()));
         txList.sort((a, b) => (b.timestamp || b.id || 0) - (a.timestamp || a.id || 0));
         transactions = txList;
         renderTxTable();
       }, () => {});
 
-      // 4) 단말기 접속 목록 리스너
       const devCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'devices');
       onSnapshot(devCollRef, (snap) => {
         snap.forEach((dSnap) => {
           const dData = dSnap.data();
-          if (dData && dData.deviceId) {
-            connectedDevices.set(dData.deviceId, dData);
-          }
+          if (dData && dData.deviceId) connectedDevices.set(dData.deviceId, dData);
         });
         updateConnectedDeviceUI();
       }, () => {});
@@ -492,47 +482,52 @@
     function setupLocalChannel() {
       if (!localChannel) return;
       localChannel.onmessage = (event) => {
-        const { type, payload } = event.data;
-        if (type === 'STUDENT_JOIN') {
-          if (payload.deviceId) {
-            connectedDevices.set(payload.deviceId, { deviceId: payload.deviceId, teamId: payload.teamId || null });
+        const { type, payload } = event.data || {};
+        if (!type) return;
+
+        if (type === 'STUDENT_JOIN' || type === 'STUDENT_CONNECT_PING') {
+          if (payload && payload.deviceId) {
+            connectedDevices.set(payload.deviceId, {
+              deviceId: payload.deviceId,
+              teamId: payload.teamId || null,
+              lastActive: Date.now()
+            });
             updateConnectedDeviceUI();
-            showToast(`새 학생 단말기 접속 (#${payload.deviceId})`);
+            showToast(`단말기 연결됨: #${payload.deviceId}${payload.teamId ? ` (${payload.teamId}조)` : ''}`);
           }
           broadcastMarketState();
         } else if (type === 'SUBMIT_ORDER' || type === 'STUDENT_ORDER_REQUEST') {
           processOrder(payload);
+        } else if (type === 'STUDENT_TEAM_UPDATED') {
+          if (payload && payload.deviceId) {
+            const dev = connectedDevices.get(payload.deviceId) || { deviceId: payload.deviceId };
+            dev.teamId = payload.teamId;
+            connectedDevices.set(payload.deviceId, dev);
+            updateConnectedDeviceUI();
+          }
         }
       };
     }
 
-    async function saveMarketState() {
-      if (!currentUser || !db) return;
-      try {
-        const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
-        await setDoc(marketDocRef, {
-          stocks,
-          remainingSeconds,
-          isTimerRunning,
-          news: document.getElementById('newsTickerText').innerText,
-          updatedAt: Date.now()
-        }, { merge: true });
-      } catch (e) {}
-    }
+    async function broadcastMarketState() {
+      if (currentUser && db) {
+        try {
+          const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
+          await setDoc(marketDocRef, {
+            stocks,
+            remainingSeconds,
+            isTimerRunning,
+            news: document.getElementById('newsTickerText').innerText,
+            updatedAt: Date.now()
+          }, { merge: true });
 
-    async function saveTeamsState() {
-      if (!currentUser || !db) return;
-      try {
-        for (let i = 1; i <= 4; i++) {
-          const teamDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'teams', String(i));
-          await setDoc(teamDocRef, teams[i], { merge: true });
-        }
-      } catch (e) {}
-    }
+          for (let i = 1; i <= 4; i++) {
+            const teamDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'teams', String(i));
+            await setDoc(teamDocRef, teams[i], { merge: true });
+          }
+        } catch (e) {}
+      }
 
-    function broadcastMarketState() {
-      saveMarketState();
-      saveTeamsState();
       if (localChannel) {
         localChannel.postMessage({
           type: 'MARKET_STATE_UPDATE',
@@ -546,9 +541,9 @@
       }
     }
 
-    // 3. 주문 체결 및 유효성 검증
     async function processOrder(order) {
-      const { teamId, stockId, orderType, quantity, deviceId } = order;
+      if (!order) return;
+      const { teamId, stockId, orderType, quantity } = order;
       const team = teams[teamId];
       const stock = stocks.find(s => s.id === stockId);
 
@@ -559,7 +554,6 @@
       let isSuccess = false;
       let failureReason = '정상 체결';
 
-      // 엄격 유효성 검증
       if (orderType === 'BUY') {
         if (team.cash >= totalCost) {
           team.cash -= totalCost;
@@ -599,7 +593,6 @@
 
       transactions.unshift(newTx);
 
-      // Firestore 저장
       if (currentUser && db) {
         try {
           if (isSuccess) {
@@ -617,7 +610,7 @@
 
       if (localChannel) {
         localChannel.postMessage({
-          type: 'ORDER_RESULT',
+          type: 'ORDER_RESULT_CALLBACK',
           payload: { teamId, transaction: newTx, isSuccess }
         });
       }
@@ -625,20 +618,13 @@
       showToast(`[${team.name}] ${stock.name} ${quantity}주 ${orderType === 'BUY' ? '매수' : '매도'} -> ${isSuccess ? '체결' : '실패'}`);
     }
 
-    // 4. 원격 조 배정 관리
     function updateConnectedDeviceUI() {
       const count = connectedDevices.size;
       document.getElementById('connectedCountBadge').innerText = `${count}대`;
 
       const tbody = document.getElementById('deviceTableBody');
       if (count === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="4" class="text-center py-8 text-slate-400 font-sans">
-              현재 접속된 학생 단말기가 없습니다.
-            </td>
-          </tr>
-        `;
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-slate-400 font-sans">현재 접속된 학생 단말기가 없습니다.</td></tr>`;
         return;
       }
 
@@ -669,7 +655,6 @@
         tbody.appendChild(tr);
       });
 
-      // 바인딩
       document.querySelectorAll('.select-assign-team').forEach((sel) => {
         sel.addEventListener('change', async (e) => {
           const devId = e.target.getAttribute('data-devid');
@@ -705,7 +690,6 @@
       showToast(`#${targetDeviceId} 단말기를 [${teamId}조]로 원격 배정했습니다.`);
     }
 
-    // 5. 화면 렌더링
     function renderStocksGrid() {
       const grid = document.getElementById('stocksGrid');
       grid.innerHTML = '';
@@ -864,7 +848,6 @@
       document.getElementById('statFailRate').innerText = `${rate}%`;
     }
 
-    // 6. 시장 턴 진행 및 주가 변동 엔진
     window.advanceMarketTick = function() {
       if (Math.random() < 0.45) {
         const randomNews = marketNewsPool[Math.floor(Math.random() * marketNewsPool.length)];
@@ -948,7 +931,6 @@
       return Number(val || 0).toLocaleString('ko-KR') + '원';
     }
 
-    // 7. 내보내기 & 복사 (execCommand 사용)
     document.getElementById('btnCopyTSV').addEventListener('click', () => {
       if (transactions.length === 0) return showToast('복사할 거래 데이터가 없습니다.', 'error');
       const headers = ['거래ID', '체결시간', '조', '구분', '회사명', '단가', '수량', '총주문액', '결과', '비고'];
@@ -1010,7 +992,6 @@
       showToast('학생 접속 링크가 복사되었습니다!');
     });
 
-    // 8. 모달 제어
     const devModal = document.getElementById('deviceManagerModal');
     document.getElementById('btnOpenDeviceManager').addEventListener('click', () => {
       updateConnectedDeviceUI();
@@ -1042,7 +1023,6 @@
       showToast('전체 게임이 초기화되었습니다.');
     });
 
-    // 9. Gemini API 연동 (지수 백오프 5회 재시도)
     async function callGemini(systemPrompt, userQuery) {
       const delays = [1000, 2000, 4000, 8000, 16000];
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
@@ -1091,9 +1071,7 @@
     });
 
     const aiModal = document.getElementById('aiAnalysisModalBackdrop');
-    function openAiAnalysisModal() {
-      aiModal.classList.remove('hidden');
-    }
+    function openAiAnalysisModal() { aiModal.classList.remove('hidden'); }
     document.getElementById('btnOpenAiModal').addEventListener('click', openAiAnalysisModal);
     document.getElementById('btnCloseAiModal').addEventListener('click', () => aiModal.classList.add('hidden'));
     document.getElementById('btnCloseAiModalBottom').addEventListener('click', () => aiModal.classList.add('hidden'));
@@ -1170,7 +1148,6 @@
       }, 3000);
     }
 
-    // 10. 초기화 실행
     window.addEventListener('DOMContentLoaded', () => {
       initRankingChart();
       renderStocksGrid();
