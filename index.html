@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>모의 주식투자 데이터분석 교실 - 교사용 관제 대시보드</title>
+  <title>모의 주식투자 교실 - 우리 조 투자 단말기</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <!-- Google Fonts: Noto Sans KR -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,252 +26,280 @@
   </script>
 
   <style>
-    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
     .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col antialiased">
 
-  <!-- ==================== 교사용 상단 제어 헤더 ==================== -->
-  <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+  <!-- ==================== 학생 상단 헤더 ==================== -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
       
       <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow">
-          🖥️
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow">
+          📱
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-base sm:text-lg font-bold">주식투자 데이터 교실 [교사용 통합 관제실]</h1>
-            <span class="text-xs bg-emerald-500/20 text-emerald-300 font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span id="connectionStatus">클라우드 DB 동기화</span>
+            <h1 class="text-base sm:text-lg font-bold text-slate-900" id="headerTitle">우리 조 모의투자 단말기</h1>
+            <!-- 조 배정 상태 배지 (학생 변경 불가 / 강사 고정) -->
+            <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1 border border-slate-200" id="myTeamBadge">
+              <span>🔒</span> <span id="myTeamBadgeText">배정 대기 중</span>
             </span>
           </div>
-          <p class="text-xs text-slate-400 hidden sm:block">전체 조 모니터링 · 난수 주가 변동 송출 · 원장 통합 집계 · AI 결산 리포트</p>
+          <p class="text-xs text-emerald-600 font-medium flex items-center gap-1" id="connectionStatusText">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            강사 관제실 실시간 연결됨
+          </p>
         </div>
       </div>
 
-      <!-- 수업 통제 타이머 및 컨트롤러 -->
-      <div class="flex items-center gap-2 sm:gap-3">
-        <div class="flex items-center gap-2 bg-slate-800 px-3.5 py-1.5 rounded-xl border border-slate-700 font-mono">
-          <span class="text-xs text-slate-400 font-sans hidden sm:inline">투자 타이머</span>
-          <span id="timerDisplay" class="text-lg font-bold text-amber-400">20:00</span>
+      <!-- 남은 시간 및 강사 잠금 해제 버튼 -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-slate-900 text-white px-3 py-1.5 rounded-xl font-mono text-xs sm:text-sm shadow-inner">
+          <span class="text-slate-400 font-sans text-xs hidden sm:inline">남은 시간</span>
+          <span id="studentTimer" class="font-bold text-amber-300">20:00</span>
         </div>
 
-        <button id="btnToggleTimer" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow">
-          ▶ 투자 시작
-        </button>
-
-        <button id="btnAdvanceTick" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold rounded-xl border border-slate-700 transition" title="시간을 1턴(30초) 진행시키고 주가를 갱신합니다">
-          ⏩ 1턴 진행
-        </button>
-
-        <button id="btnOpenAiModal" class="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow transition">
-          <span>✨ AI 데이터 결산</span>
-        </button>
-
-        <button id="btnOpenResetModal" class="p-2 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 text-sm transition" title="전체 데이터 리셋">
-          🔄
+        <!-- 강사 전용 비상 조 재지정 버튼 (학생 클릭 시 PIN 요구) -->
+        <button id="btnTeacherAuth" class="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition" title="강사 전용 조 배정 PIN 인증">
+          🔒
         </button>
       </div>
 
     </div>
   </header>
 
-  <!-- ==================== 뉴스 티커 & AI 속보 생성 ==================== -->
-  <div class="bg-indigo-950 text-indigo-200 px-4 py-2 text-xs flex items-center justify-between gap-3 border-b border-indigo-900">
-    <div class="flex items-center gap-3 truncate">
-      <span class="bg-indigo-700 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px] shrink-0">GLOBAL NEWS TICKER</span>
-      <div class="truncate font-medium text-slate-200" id="newsTickerText">
-        📢 주식 시장이 개장되었습니다! 각 조 학생 화면으로 실시간 시세와 속보가 전송됩니다.
-      </div>
-    </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <button id="btnAiBriefing" class="flex items-center gap-1 bg-indigo-800 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg text-xs font-semibold transition border border-indigo-600">
-        <span>✨ AI 속보 전송</span>
-      </button>
+  <!-- ==================== 강사 송출 속보 티커 ==================== -->
+  <div class="bg-indigo-900 text-indigo-100 px-4 py-2 text-xs flex items-center gap-3 border-b border-indigo-950">
+    <span class="bg-indigo-700 text-white px-2 py-0.5 rounded font-bold uppercase text-[10px] shrink-0">MARKET NEWS</span>
+    <div class="truncate font-medium" id="studentNewsTicker">
+      강사 관제 화면에서 투자 시작을 누르면 시세와 뉴스가 시작됩니다.
     </div>
   </div>
 
-  <!-- ==================== 메인 관제 콘텐츠 ==================== -->
-  <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 flex-1">
+  <!-- ==================== 메인 학생 작업창 ==================== -->
+  <main class="max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
 
-    <!-- [구역 1] 전 조 실시간 시세 및 시장 현황 -->
+    <!-- [1구역] 내 조 전용 자산 대시보드 카드 -->
+    <section class="bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-800 text-white rounded-3xl p-5 sm:p-6 shadow-xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+        <div>
+          <span class="text-xs font-semibold text-blue-200">초기 투자 원금: 1,000,000원</span>
+          <h2 class="text-2xl sm:text-3xl font-black mt-0.5" id="myTeamDisplayTitle">[배정 대기] 총 평가 자산</h2>
+        </div>
+        <div class="text-left sm:text-right">
+          <div class="text-xs text-blue-200">현재 총 평가 금액</div>
+          <div class="text-2xl sm:text-3xl font-black font-mono text-amber-300" id="valTotalAsset">1,000,000원</div>
+          <div class="text-xs font-bold font-mono mt-0.5" id="valReturnRate">▲ 0.0%</div>
+        </div>
+      </div>
+
+      <!-- 세부 자산 구성 -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 text-xs">
+        <div class="bg-white/10 p-3 rounded-2xl border border-white/10">
+          <span class="text-blue-200">주문 가능 현금</span>
+          <div class="text-base sm:text-lg font-bold font-mono text-white mt-0.5" id="valCash">1,000,000원</div>
+        </div>
+        <div class="bg-white/10 p-3 rounded-2xl border border-white/10">
+          <span class="text-blue-200">보유 주식 평가액</span>
+          <div class="text-base sm:text-lg font-bold font-mono text-white mt-0.5" id="valStockTotal">0원</div>
+        </div>
+        <div class="bg-white/10 p-3 rounded-2xl border border-white/10">
+          <span class="text-blue-200">내 조 주문 횟수</span>
+          <div class="text-base sm:text-lg font-bold font-mono text-white mt-0.5" id="valTxCount">0회</div>
+        </div>
+        <div class="bg-white/10 p-3 rounded-2xl border border-white/10">
+          <span class="text-blue-200">주문 성공률</span>
+          <div class="text-base sm:text-lg font-bold font-mono text-white mt-0.5" id="valSuccessRate">0.0%</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- [2구역] 실시간 종목 시세표 -->
     <section>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
-          <span>🏢</span> 실시간 전 종목 시세표 (학생 단말기에 실시간 전송 중)
-        </h2>
-        <span class="text-xs text-slate-500 font-medium">자동 변동 주기: 30초</span>
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <span>📈</span> 현재 시장 종목 시세 (강사 관제 화면 실시간 반영)
+        </h3>
+        <span class="text-xs text-slate-400">카드를 누르면 주문창에 즉시 입력됩니다.</span>
       </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="stocksGrid">
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="studentStockCards">
         <!-- JS 렌더링 -->
       </div>
     </section>
 
-    <!-- [구역 2] 조별 실시간 순위 및 포트폴리오 비교 그래프 -->
-    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      
-      <!-- 좌측 5열: 4개 조 순위 카드 -->
-      <div class="lg:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-          <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
-            <span>🏆</span> 1~4조 실시간 자산 및 수익률 순위
+    <!-- [3구역] 2단 레이아웃: 내 조 주문창 vs 내 조 보유 주식 및 거래 기록 -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- 좌측 6열: 주문 실행 패널 -->
+      <section class="lg:col-span-6 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <h3 class="font-bold text-slate-900 text-base flex items-center gap-1.5">
+            <span>🛒</span> 우리 조 매수 / 매도 주문하기
           </h3>
-          <span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">기본: 100만 원</span>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="orderNotice">강사 배정 조 전용</span>
         </div>
-        <div class="space-y-3" id="teamRankList">
-          <!-- JS 렌더링 -->
-        </div>
-      </div>
 
-      <!-- 우측 7열: 조별 총자산 비교 막대그래프 -->
-      <div class="lg:col-span-7 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
-        <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
-          <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-1.5">
-            <span>📊</span> 조별 자산 구성(현금 vs 주식) 실시간 비교 차트
-          </h3>
-          <span class="text-xs text-slate-400">누적 막대 그래프</span>
-        </div>
-        <div class="h-64 relative w-full">
-          <canvas id="rankingChart"></canvas>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- [구역 3] 구글 스프레드시트 호환 통합 거래 원장 -->
-    <section class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <!-- 회사 선택 -->
         <div>
-          <div class="flex items-center gap-2">
-            <span class="text-lg">📋</span>
-            <h2 class="font-bold text-slate-900 text-base">전체 조 통합 거래 로그 원장 (구글 시트 연동)</h2>
-            <span class="text-xs bg-emerald-100 text-emerald-800 font-semibold px-2.5 py-0.5 rounded-full">클라우드 DB 실시간 누적</span>
+          <label class="block text-xs font-bold text-slate-600 mb-1">1) 거래할 회사</label>
+          <select id="selectStock" class="w-full text-sm font-semibold bg-white border border-slate-200 rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-blue-500">
+            <!-- JS 동적 생성 -->
+          </select>
+          <div class="flex justify-between text-xs text-slate-500 mt-1 px-1">
+            <span>현재가: <b id="orderStockPrice" class="text-slate-800 font-mono">0원</b></span>
+            <span>내 조 보유: <b id="orderStockHolding" class="text-slate-800 font-mono">0주</b></span>
           </div>
-          <p class="text-xs text-slate-500 mt-1">각 조 단말기에서 전송된 매수·매도 주문과 성공/실패 내역이 실시간으로 집계됩니다.</p>
         </div>
 
-        <div class="flex items-center gap-2">
-          <button id="btnCopyTSV" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm">
-            <span>📑</span> 구글 시트 복사(TSV)
+        <!-- 매수 / 매도 탭 버튼 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">2) 거래 구분</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" id="btnBuy" class="py-2.5 rounded-xl font-bold text-sm border-2 border-rose-500 bg-rose-50 text-rose-600 transition">
+              매수 (사기 📈)
+            </button>
+            <button type="button" id="btnSell" class="py-2.5 rounded-xl font-bold text-sm border-2 border-slate-200 bg-white text-slate-600 transition">
+              매도 (팔기 📉)
+            </button>
+          </div>
+        </div>
+
+        <!-- 주문 수량 -->
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">3) 수량 입력</label>
+          <div class="flex items-center gap-2">
+            <input type="number" id="inputQty" min="1" max="1000" value="10" class="flex-1 text-right font-bold text-slate-900 border border-slate-200 rounded-xl px-3 py-2 font-mono">
+            <span class="text-sm font-bold text-slate-600">주</span>
+          </div>
+          <div class="flex gap-1.5 mt-2">
+            <button id="btnPreset1" class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600">1주</button>
+            <button id="btnPreset10" class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600">10주</button>
+            <button id="btnPreset50" class="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600">50주</button>
+            <button id="btnPresetMax" class="px-2.5 py-1 text-xs bg-blue-50 text-blue-600 font-bold rounded-lg ml-auto">최대 가능 수량</button>
+          </div>
+        </div>
+
+        <!-- 필요 금액 및 전송 버튼 -->
+        <div class="pt-3 border-t border-slate-100 space-y-3">
+          <div class="flex justify-between items-center text-sm">
+            <span class="text-slate-500 font-medium" id="lblOrderAmount">총 필요 현금:</span>
+            <span class="text-lg font-black font-mono text-slate-900" id="valOrderTotal">0원</span>
+          </div>
+          <button id="btnSubmitOrder" class="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm shadow-md transition transform active:scale-98">
+            매수 주문 전송하기
           </button>
-          <button id="btnDownloadCSV" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm">
-            <span>💾</span> CSV 다운로드
-          </button>
         </div>
-      </div>
+      </section>
 
-      <!-- 원장 테이블 -->
-      <div class="overflow-x-auto custom-scroll max-h-80 border border-slate-200 rounded-xl">
-        <table class="w-full text-left text-xs text-slate-700 border-collapse">
-          <thead class="bg-slate-50 text-slate-600 font-bold sticky top-0 border-b border-slate-200 z-10">
-            <tr>
-              <th class="p-2.5 text-center">번호</th>
-              <th class="p-2.5">체결 시간</th>
-              <th class="p-2.5 text-center">조</th>
-              <th class="p-2.5 text-center">구분</th>
-              <th class="p-2.5">회사명</th>
-              <th class="p-2.5 text-right">단가</th>
-              <th class="p-2.5 text-right">수량</th>
-              <th class="p-2.5 text-right">총 주문액</th>
-              <th class="p-2.5 text-center">결과</th>
-              <th class="p-2.5">비고 및 실패 원인</th>
-            </tr>
-          </thead>
-          <tbody id="txTableBody" class="divide-y divide-slate-100 font-mono">
-            <tr>
-              <td colspan="10" class="text-center py-10 text-slate-400 font-sans">
-                학생들이 주문을 시작하면 실시간으로 원장에 기록됩니다.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- 우측 6열: 내 조 보유 현황 및 내 조 거래 내역 -->
+      <section class="lg:col-span-6 space-y-6">
 
-      <!-- 통계 배지 -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
-        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex justify-between items-center">
-          <span class="text-slate-500 font-sans">총 주문 건수:</span>
-          <b id="statTotalTx" class="font-mono text-slate-900">0건</b>
+        <!-- 내 조 주식 포트폴리오 표 -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <h3 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+            <span>💼</span> 내 조 보유 주식 목록
+          </h3>
+          <div class="overflow-x-auto border border-slate-100 rounded-xl">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50 text-slate-500 font-semibold border-b">
+                <tr>
+                  <th class="p-2.5">회사명</th>
+                  <th class="p-2.5 text-right">보유량</th>
+                  <th class="p-2.5 text-right">현재가</th>
+                  <th class="p-2.5 text-right">평가금액</th>
+                </tr>
+              </thead>
+              <tbody id="myHoldingsTable" class="divide-y font-mono">
+                <!-- JS 렌더링 -->
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200 flex justify-between items-center">
-          <span class="text-emerald-700 font-sans">체결 성공:</span>
-          <b id="statSuccessTx" class="font-mono text-emerald-800">0건</b>
+
+        <!-- 내 조 주문 거래 기록 (성공/실패 피드백) -->
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+              <span>📝</span> 우리 조 주문 내역 (성공 / 실패)
+            </h3>
+            <span class="text-[11px] text-slate-400">실시간 원장 동기화</span>
+          </div>
+
+          <div class="overflow-y-auto max-h-52 custom-scroll border border-slate-100 rounded-xl divide-y text-xs font-mono" id="myTxLogs">
+            <div class="p-4 text-center text-slate-400 font-sans">아직 보낸 주문이 없습니다.</div>
+          </div>
         </div>
-        <div class="bg-rose-50 p-2.5 rounded-xl border border-rose-200 flex justify-between items-center">
-          <span class="text-rose-700 font-sans">거래 실패:</span>
-          <b id="statFailedTx" class="font-mono text-rose-800">0건</b>
-        </div>
-        <div class="bg-blue-50 p-2.5 rounded-xl border border-blue-200 flex justify-between items-center">
-          <span class="text-blue-700 font-sans">데이터 오류율:</span>
-          <b id="statFailRate" class="font-mono text-blue-800">0.0%</b>
-        </div>
-      </div>
-    </section>
+
+      </section>
+
+    </div>
 
   </main>
 
-  <!-- ==================== 초기화 확인 커스텀 모달 ==================== -->
-  <div id="resetModalBackdrop" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-6 border border-slate-200 shadow-2xl space-y-4">
-      <div class="flex items-center gap-3">
-        <span class="text-2xl">⚠️</span>
-        <h3 class="text-base font-bold text-slate-900">전체 데이터 초기화</h3>
+  <!-- ==================== 강사 조 배정 대기 오버레이 모달 ==================== -->
+  <div id="waitingAssignmentModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 border border-slate-200 shadow-2xl text-center space-y-5">
+      <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-3xl mx-auto shadow-inner animate-bounce">
+        ⏳
       </div>
-      <p class="text-xs text-slate-600 leading-relaxed">
-        클라우드 데이터베이스의 모든 주가, 1~4조의 잔고 및 거래 원장 기록이 최초 상태(100만 원)로 리셋됩니다. 계속하시겠습니까?
-      </p>
-      <div class="flex justify-end gap-2 pt-2">
-        <button id="btnCancelReset" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">취소</button>
-        <button id="btnConfirmReset" class="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow transition">전체 초기화 실행</button>
+      <div class="space-y-1">
+        <h2 class="text-xl font-black text-slate-900">선생님의 조 배정을 기다리고 있습니다</h2>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          선생님이 관제 화면에서 이 단말기의 조를 배정해 주시거나,<br>배정된 QR코드로 접속하면 자동으로 시작됩니다.
+        </p>
+      </div>
+
+      <!-- 내 단말기 식별 고유 태그 -->
+      <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex justify-between items-center text-xs">
+        <span class="text-slate-500 font-medium">내 단말기 고유 ID</span>
+        <span id="displayDeviceId" class="font-mono font-black text-blue-600 bg-white px-2 py-1 rounded-lg border border-slate-200">#DEV-INIT</span>
+      </div>
+
+      <!-- 교사 현장 수동 배정 트리거 -->
+      <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
+        <span class="text-slate-400">선생님이 현장에 계신가요?</span>
+        <button id="btnOpenPinModalFromWaiting" class="text-blue-600 hover:text-blue-800 font-bold underline">
+          선생님 직접 배정 (PIN)
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- ==================== Gemini AI 데이터 분석 모달 ==================== -->
-  <div id="aiAnalysisModalBackdrop" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  <!-- ==================== 강사 전용 마스터 PIN 인증 모달 ==================== -->
+  <div id="teacherPinModal" class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-6 border border-slate-200 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center">
+        <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+          <span>🔑</span> 강사 조 배정 인증
+        </h3>
+        <button id="btnClosePinModal" class="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
+      </div>
+      <p class="text-xs text-slate-500">강사용 마스터 PIN 번호(기본: 1234)를 입력하고 이 기기의 조를 지정하세요.</p>
       
-      <div class="p-6 bg-gradient-to-r from-slate-900 via-indigo-900 to-purple-900 text-white flex justify-between items-start">
+      <div class="space-y-3">
         <div>
-          <h3 class="text-lg font-bold flex items-center gap-2">✨ Gemini AI 우리 반 투자 데이터 결산 리포트</h3>
-          <p class="text-xs text-indigo-200 mt-1">원장에 쌓인 실제 거래 데이터를 바탕으로 교육용 분석 보고서를 생성합니다.</p>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">마스터 PIN</label>
+          <input type="password" id="inputTeacherPin" maxlength="4" placeholder="1234" class="w-full text-center tracking-widest text-lg font-mono font-bold border border-slate-200 rounded-xl py-2 focus:ring-2 focus:ring-blue-500">
         </div>
-        <button id="btnCloseAiModal" class="text-indigo-200 hover:text-white text-2xl font-bold leading-none">&times;</button>
-      </div>
-
-      <div class="p-6 overflow-y-auto custom-scroll space-y-5 text-slate-800 flex-1">
-        <div id="aiLoadingIndicator" class="hidden p-8 text-center space-y-3">
-          <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-200 border-t-indigo-600"></div>
-          <p class="text-sm font-bold text-indigo-900">Gemini가 4개 조의 거래 원장을 심층 분석하고 있습니다...</p>
-        </div>
-
-        <div id="aiReportContainer" class="hidden space-y-3">
-          <div class="flex justify-between items-center text-xs text-slate-500 border-b pb-2">
-            <span>생성 모델: Gemini 2.5 Flash</span>
-            <button id="btnCopyAiReport" class="text-indigo-600 font-bold hover:underline">📋 리포트 복사</button>
-          </div>
-          <div id="aiReportContent" class="text-xs sm:text-sm leading-relaxed text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-200 whitespace-pre-wrap"></div>
-        </div>
-
-        <div id="aiInitialPromptState" class="p-6 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2">
-          <div class="text-3xl">📊</div>
-          <h4 class="font-bold text-slate-800 text-sm">20분 모의투자가 종료되었거나 데이터를 결산할 준비가 되셨나요?</h4>
-          <p class="text-xs text-slate-500 max-w-md mx-auto">
-            [분석 시작하기] 버튼을 누르면 거래 횟수, 잔액/수량 부족 오류, 순위 비결을 분석한 맞춤형 교사용 총평이 작성됩니다.
-          </p>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">배정할 조 선택</label>
+          <select id="selectPinTeam" class="w-full text-xs font-bold border border-slate-200 rounded-xl p-2.5 bg-slate-50">
+            <option value="1">1조로 배정</option>
+            <option value="2">2조로 배정</option>
+            <option value="3">3조로 배정</option>
+            <option value="4">4조로 배정</option>
+          </select>
         </div>
       </div>
 
-      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between">
-        <button id="btnCloseAiModalBottom" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-xl transition">닫기</button>
-        <button id="btnStartAiAnalysis" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow transition">
-          ✨ Gemini 분석 시작하기
-        </button>
+      <div class="pt-2 flex gap-2">
+        <button id="btnCancelPin" class="flex-1 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition">취소</button>
+        <button id="btnApplyPinAssignment" class="flex-1 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow transition">배정 적용</button>
       </div>
-
     </div>
   </div>
 
@@ -287,9 +313,9 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // 1. Firebase 환경 초기화 (환경 변수 또는 기본 모의 구성)
+    // 1. Firebase 환경 초기화
     const firebaseConfig = typeof __firebase_config !== 'undefined'
       ? JSON.parse(__firebase_config)
       : {
@@ -305,44 +331,63 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'stock-class-app';
-    const apiKey = ""; // Gemini API 키 (실행 환경에서 자동 주입)
 
     let currentUser = null;
-
-    // 2. 기본 데이터 구조
+    let myTeamId = null; // 초기에는 미배정 상태
+    let currentOrderType = 'BUY';
     const INITIAL_CASH = 1000000;
-    const defaultStocks = [
-      { id: 'ai', name: '넥스트AI', category: 'AI·로봇', price: 50000, basePrice: 50000, change: 0, changeRate: 0 },
-      { id: 'eco', name: '에코그린', category: '친환경 배터리', price: 20000, basePrice: 20000, change: 0, changeRate: 0 },
-      { id: 'game', name: '케이게임즈', category: '메타버스 게임', price: 10000, basePrice: 10000, change: 0, changeRate: 0 },
-      { id: 'food', name: '스타푸드', category: 'K-간식·푸드', price: 5000, basePrice: 5000, change: 0, changeRate: 0 }
+    const MASTER_PIN = "1234";
+
+    // 단말기 고유 ID 생성 (세션 유지)
+    let deviceId = sessionStorage.getItem('stock_device_id');
+    if (!deviceId) {
+      deviceId = 'DEV-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      sessionStorage.setItem('stock_device_id', deviceId);
+    }
+    document.getElementById('displayDeviceId').innerText = `#${deviceId}`;
+
+    let stocks = [
+      { id: 'ai', name: '넥스트AI', category: 'AI·로봇', price: 50000, change: 0, changeRate: 0 },
+      { id: 'eco', name: '에코그린', category: '친환경 배터리', price: 20000, change: 0, changeRate: 0 },
+      { id: 'game', name: '케이게임즈', category: '메타버스 게임', price: 10000, change: 0, changeRate: 0 },
+      { id: 'food', name: '스타푸드', category: 'K-간식·푸드', price: 5000, change: 0, changeRate: 0 }
     ];
 
-    const defaultTeams = {
-      1: { id: 1, name: '1조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 }, color: '#2563eb' },
-      2: { id: 2, name: '2조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 }, color: '#059669' },
-      3: { id: 3, name: '3조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 }, color: '#7c3aed' },
-      4: { id: 4, name: '4조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 }, color: '#ea580c' }
+    let teams = {
+      1: { id: 1, name: '1조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } },
+      2: { id: 2, name: '2조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } },
+      3: { id: 3, name: '3조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } },
+      4: { id: 4, name: '4조', cash: INITIAL_CASH, holdings: { ai: 0, eco: 0, game: 0, food: 0 } }
     };
 
-    const marketNewsPool = [
-      { text: "속보: 넥스트AI, 학교 청소 로봇 대량 납품 계약 체결!", target: 'ai', impact: 1.08 },
-      { text: "속보: 케이게임즈 신작 웹툰 게임 다운로드 1위 돌파!", target: 'game', impact: 1.10 },
-      { text: "속보: 에코그린, 폐배터리 재활용 신기술 특허 취득 성공", target: 'eco', impact: 1.07 },
-      { text: "속보: 스타푸드 신제품 컵 떡볶이, SNS 글로벌 챌린지 열풍!", target: 'food', impact: 1.09 },
-      { text: "경고: 원자재 가격 급등으로 배터리 생산 원가 부담 상승", target: 'eco', impact: 0.94 },
-      { text: "경고: 인기 게임 서버 일시 장애로 유저 불만 속출", target: 'game', impact: 0.93 }
-    ];
+    let allTransactions = [];
 
-    let stocks = JSON.parse(JSON.stringify(defaultStocks));
-    let teams = JSON.parse(JSON.stringify(defaultTeams));
-    let transactions = [];
+    // 2. 조 배정 판별 로직 (방식 1: URL 파라미터 확인)
+    function checkUrlAssignment() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const teamParam = urlParams.get('team') || urlParams.get('t');
+      if (teamParam) {
+        const parsed = parseInt(teamParam, 10);
+        if ([1, 2, 3, 4].includes(parsed)) {
+          applyTeamAssignment(parsed, 'URL 파라미터 지정');
+          return true;
+        }
+      }
+      return false;
+    }
 
-    const TOTAL_SECONDS = 20 * 60;
-    let remainingSeconds = TOTAL_SECONDS;
-    let timerInterval = null;
-    let isTimerRunning = false;
-    let rankingChartInstance = null;
+    function applyTeamAssignment(teamNum, source = '강사 배정') {
+      myTeamId = teamNum;
+      document.getElementById('waitingAssignmentModal').classList.add('hidden');
+      document.getElementById('myTeamBadge').className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1 border border-blue-200';
+      document.getElementById('myTeamBadgeText').innerText = `${teamNum}조 배정됨 (강사 고정)`;
+      document.getElementById('headerTitle').innerText = `[${teamNum}조] 모의투자 단말기`;
+      document.getElementById('myTeamDisplayTitle').innerText = `[${teamNum}조] 총 평가 자산`;
+      document.getElementById('orderNotice').innerText = `${teamNum}조 주문 전용`;
+
+      renderAll();
+      showToast(`[${teamNum}조]로 배정되었습니다! (${source})`);
+    }
 
     // 3. 인증 실행
     async function initAuth() {
@@ -353,8 +398,7 @@
           await signInAnonymously(auth);
         }
       } catch (err) {
-        // Mock 환경 fallback 처리
-        currentUser = { uid: 'teacher-admin' };
+        currentUser = { uid: 'student-team-user' };
         setupFirestoreListeners();
       }
     }
@@ -362,539 +406,389 @@
     onAuthStateChanged(auth, (user) => {
       currentUser = user;
       if (user) {
-        document.getElementById('connectionStatus').innerText = '클라우드 DB 동기화됨';
         setupFirestoreListeners();
+        registerDeviceToCloud();
       }
     });
 
     initAuth();
 
-    // 4. Firestore 실시간 리스너 설정 (Rule 1 & Rule 2 준수)
+    // 단말기를 클라우드 DB에 등록 (강사 원격 배정용)
+    async function registerDeviceToCloud() {
+      if (!currentUser) return;
+      const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
+      try {
+        await setDoc(deviceDocRef, {
+          deviceId,
+          teamId: myTeamId || null,
+          lastActive: Date.now()
+        }, { merge: true });
+      } catch (e) {}
+    }
+
+    // 4. Firestore 실시간 리스너 (RULE 1, RULE 2 준수)
     function setupFirestoreListeners() {
       if (!currentUser) return;
 
-      // (1) 시장 상태 리스너 (Market Doc)
+      // (1) 시장 상태 리스너: 주가/타이머/뉴스 수신
       const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
       onSnapshot(marketDocRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data.stocks) stocks = data.stocks;
-          if (typeof data.remainingSeconds === 'number') {
-            remainingSeconds = data.remainingSeconds;
-            document.getElementById('timerDisplay').innerText = formatTime(remainingSeconds);
+          if (data.stocks) {
+            stocks = data.stocks;
+            initStockSelect();
           }
-          if (typeof data.isTimerRunning === 'boolean') {
-            isTimerRunning = data.isTimerRunning;
-            updateTimerButtonUI();
+          if (typeof data.remainingSeconds === 'number') {
+            document.getElementById('studentTimer').innerText = formatTime(data.remainingSeconds);
           }
           if (data.news) {
-            document.getElementById('newsTickerText').innerText = data.news;
+            document.getElementById('studentNewsTicker').innerText = data.news;
           }
-          renderStocksGrid();
-          renderTeamRanks();
-        } else {
-          // 최초 초기화
-          saveMarketStateToDb();
+          renderAll();
         }
-      }, (err) => {
-        // error callback
-      });
+      }, () => {});
 
-      // (2) 조별 상태 리스너 (Teams Collection)
+      // (2) 단말기 배정 리스너: 강사가 클라우드에서 배정한 조 실시간 감지 (방식 2)
+      const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
+      onSnapshot(deviceDocRef, (snap) => {
+        if (snap.exists()) {
+          const dData = snap.data();
+          if (dData.teamId && [1, 2, 3, 4].includes(dData.teamId)) {
+            if (myTeamId !== dData.teamId) {
+              applyTeamAssignment(dData.teamId, '클라우드 원격 배정');
+            }
+          }
+        }
+      }, () => {});
+
+      // (3) 조별 잔고 상태 리스너
       const teamsCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'teams');
       onSnapshot(teamsCollRef, (snap) => {
-        if (!snap.empty) {
-          snap.forEach((docSnap) => {
-            const tData = docSnap.data();
-            if (tData && tData.id) {
-              teams[tData.id] = tData;
-            }
-          });
-          renderTeamRanks();
-        } else {
-          // 최초 1~4조 DB 시딩
-          saveAllTeamsToDb();
-        }
-      }, (err) => {});
+        snap.forEach((docSnap) => {
+          const tData = docSnap.data();
+          if (tData && tData.id) {
+            teams[tData.id] = tData;
+          }
+        });
+        renderAll();
+      }, () => {});
 
-      // (3) 거래 원장 리스너 (Transactions Collection)
+      // (4) 전체 거래 원장 리스너
       const txCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
       onSnapshot(txCollRef, (snap) => {
         const txList = [];
         snap.forEach((docSnap) => {
           txList.push(docSnap.data());
         });
-        // 시간 역순 정렬 (최신순)
         txList.sort((a, b) => (b.timestamp || b.id || 0) - (a.timestamp || a.id || 0));
-        transactions = txList;
-        renderTxTable();
-      }, (err) => {});
+        allTransactions = txList;
+        renderMyTxLogs();
+        renderMyAssetSummary();
+      }, () => {});
     }
 
-    // DB 쓰기 함수 (Rule 1 & Rule 3 준수)
-    async function saveMarketStateToDb() {
-      if (!currentUser) return;
-      const marketDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_state', 'current');
-      try {
-        await setDoc(marketDocRef, {
-          stocks,
-          remainingSeconds,
-          isTimerRunning,
-          news: document.getElementById('newsTickerText').innerText,
-          updatedAt: Date.now()
-        });
-      } catch (e) {}
+    // 5. 화면 렌더링
+    function renderAll() {
+      if (!myTeamId) return; // 미배정 시 대기
+      renderMyAssetSummary();
+      renderStockCards();
+      renderMyHoldingsTable();
+      updateOrderPreview();
     }
 
-    async function saveAllTeamsToDb() {
-      if (!currentUser) return;
-      for (let i = 1; i <= 4; i++) {
-        const teamDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'teams', String(i));
-        try {
-          await setDoc(teamDocRef, teams[i]);
-        } catch (e) {}
-      }
+    function renderMyAssetSummary() {
+      if (!myTeamId) return;
+      const team = teams[myTeamId];
+      if (!team) return;
+
+      let stockTotal = 0;
+      stocks.forEach(s => {
+        stockTotal += s.price * (team.holdings?.[s.id] || 0);
+      });
+
+      const totalAsset = (team.cash || 0) + stockTotal;
+      const returnRate = ((totalAsset - INITIAL_CASH) / INITIAL_CASH) * 100;
+      const isPlus = returnRate >= 0;
+
+      document.getElementById('valCash').innerText = formatKRW(team.cash);
+      document.getElementById('valStockTotal').innerText = formatKRW(stockTotal);
+      document.getElementById('valTotalAsset').innerText = formatKRW(totalAsset);
+
+      const rateElem = document.getElementById('valReturnRate');
+      rateElem.innerText = `${isPlus ? '▲' : '▼'} ${Math.abs(returnRate).toFixed(1)}%`;
+      rateElem.className = `text-xs font-bold font-mono mt-0.5 ${isPlus ? 'text-rose-300' : 'text-blue-300'}`;
+
+      const myTxs = allTransactions.filter(t => t.teamId === myTeamId || t.teamName === `${myTeamId}조`);
+      const totalTx = myTxs.length;
+      const successTx = myTxs.filter(t => t.status === '성공').length;
+      document.getElementById('valTxCount').innerText = `${totalTx}회`;
+      document.getElementById('valSuccessRate').innerText = totalTx > 0 ? `${((successTx / totalTx) * 100).toFixed(0)}%` : '0.0%';
     }
 
-    // 5. UI 렌더링 함수들
-    function renderStocksGrid() {
-      const grid = document.getElementById('stocksGrid');
-      grid.innerHTML = '';
+    function renderStockCards() {
+      const container = document.getElementById('studentStockCards');
+      container.innerHTML = '';
 
-      stocks.forEach(stock => {
-        const isUp = stock.change >= 0;
-        const colorClass = isUp ? 'text-rose-600' : 'text-blue-600';
-        const bgClass = isUp ? 'bg-rose-50 border-rose-200' : 'bg-blue-50 border-blue-200';
+      stocks.forEach(s => {
+        const isUp = s.change >= 0;
+        const color = isUp ? 'text-rose-600' : 'text-blue-600';
         const arrow = isUp ? '▲' : '▼';
 
         const card = document.createElement('div');
-        card.className = `p-4 rounded-2xl border bg-white shadow-sm flex flex-col justify-between`;
+        card.className = 'p-3 bg-white rounded-xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-500 transition';
+        card.onclick = () => {
+          document.getElementById('selectStock').value = s.id;
+          updateOrderPreview();
+        };
+
         card.innerHTML = `
-          <div>
-            <div class="flex justify-between items-start mb-2">
-              <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${bgClass} ${colorClass}">${stock.category}</span>
-              <span class="text-[11px] font-mono font-bold ${colorClass}">${arrow} ${Math.abs(stock.changeRate).toFixed(1)}%</span>
-            </div>
-            <h3 class="font-bold text-slate-900 text-base">${stock.name}</h3>
-            <div class="text-xl font-black text-slate-900 font-mono mt-1">${formatKRW(stock.price)}</div>
-            <div class="text-[11px] text-slate-400 mt-0.5">변동액 ${formatKRW(stock.change)}</div>
+          <div class="flex justify-between text-[11px]">
+            <span class="font-semibold text-slate-500">${s.category}</span>
+            <span class="font-mono font-bold ${color}">${arrow}${Math.abs(s.changeRate).toFixed(1)}%</span>
           </div>
+          <div class="font-bold text-slate-900 text-sm mt-1">${s.name}</div>
+          <div class="font-mono font-black text-slate-800 text-base mt-0.5">${formatKRW(s.price)}</div>
         `;
-        grid.appendChild(card);
+        container.appendChild(card);
       });
     }
 
-    function calculateTeamStockValuation(team) {
-      let sum = 0;
-      stocks.forEach(s => {
-        sum += s.price * (team.holdings?.[s.id] || 0);
-      });
-      return sum;
-    }
-
-    function getSortedTeamList() {
-      const list = Object.values(teams).map(team => {
-        const stockVal = calculateTeamStockValuation(team);
-        const totalAsset = (team.cash || 0) + stockVal;
-        const returnRate = ((totalAsset - INITIAL_CASH) / INITIAL_CASH) * 100;
-        return { ...team, stockVal, totalAsset, returnRate };
-      });
-      list.sort((a, b) => b.totalAsset - a.totalAsset);
-      return list;
-    }
-
-    function renderTeamRanks() {
-      const container = document.getElementById('teamRankList');
-      container.innerHTML = '';
-      const list = getSortedTeamList();
-
-      list.forEach((team, idx) => {
-        const rank = idx + 1;
-        const isPlus = team.returnRate >= 0;
-        const color = isPlus ? 'text-rose-600' : 'text-blue-600';
-        const arrow = isPlus ? '▲' : '▼';
-
-        const item = document.createElement('div');
-        item.className = 'p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between';
-        item.innerHTML = `
-          <div class="flex items-center gap-3">
-            <span class="w-6 h-6 rounded-full ${rank === 1 ? 'bg-amber-400 text-slate-950' : 'bg-slate-200 text-slate-700'} font-black text-xs flex items-center justify-center">${rank}</span>
-            <div>
-              <div class="font-bold text-slate-900 text-sm">${team.name}</div>
-              <div class="text-[10px] text-slate-500">현금: ${formatKRW(team.cash)} | 주식: ${formatKRW(team.stockVal)}</div>
-            </div>
-          </div>
-          <div class="text-right">
-            <div class="font-black font-mono text-slate-900 text-sm sm:text-base">${formatKRW(team.totalAsset)}</div>
-            <div class="text-xs font-mono font-bold ${color}">${arrow} ${Math.abs(team.returnRate).toFixed(1)}%</div>
-          </div>
-        `;
-        container.appendChild(item);
-      });
-
-      updateRankingChart(list);
-    }
-
-    function initRankingChart() {
-      const ctx = document.getElementById('rankingChart').getContext('2d');
-      rankingChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: ['1조', '2조', '3조', '4조'],
-          datasets: [
-            { label: '보유 현금', data: [INITIAL_CASH, INITIAL_CASH, INITIAL_CASH, INITIAL_CASH], backgroundColor: '#94a3b8', borderRadius: 6 },
-            { label: '주식 평가액', data: [0, 0, 0, 0], backgroundColor: '#3b82f6', borderRadius: 6 }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: { stacked: true, grid: { display: false } },
-            y: {
-              stacked: true,
-              grid: { color: '#f1f5f9' },
-              ticks: { callback: v => (v / 10000) + '만' }
-            }
-          },
-          plugins: { legend: { position: 'top' } }
-        }
-      });
-    }
-
-    function updateRankingChart(sortedTeams) {
-      if (!rankingChartInstance) return;
-      const ordered = [1, 2, 3, 4].map(id => sortedTeams.find(t => t.id === id) || { cash: 0, stockVal: 0 });
-      rankingChartInstance.data.datasets[0].data = ordered.map(t => t.cash);
-      rankingChartInstance.data.datasets[1].data = ordered.map(t => t.stockVal);
-      rankingChartInstance.update();
-    }
-
-    function renderTxTable() {
-      const tbody = document.getElementById('txTableBody');
-      if (transactions.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-slate-400 font-sans">학생들이 주문을 시작하면 실시간으로 원장에 기록됩니다.</td></tr>`;
-        updateTxStats(0, 0, 0);
-        return;
-      }
-
+    function renderMyHoldingsTable() {
+      const tbody = document.getElementById('myHoldingsTable');
       tbody.innerHTML = '';
-      let successCount = 0;
-      let failCount = 0;
+      if (!myTeamId) return;
+      const team = teams[myTeamId];
+      if (!team) return;
 
-      transactions.forEach((tx, i) => {
-        if (tx.status === '성공') successCount++;
-        else failCount++;
+      stocks.forEach(s => {
+        const qty = team.holdings?.[s.id] || 0;
+        const total = s.price * qty;
 
         const tr = document.createElement('tr');
-        tr.className = tx.status === '성공' ? 'hover:bg-slate-50' : 'bg-rose-50/50 hover:bg-rose-50';
-
+        tr.className = qty > 0 ? 'bg-blue-50/40 font-semibold' : 'text-slate-400';
         tr.innerHTML = `
-          <td class="p-2.5 text-center text-slate-400">${transactions.length - i}</td>
-          <td class="p-2.5 text-slate-600">${tx.time || '-'}</td>
-          <td class="p-2.5 text-center font-bold text-slate-800">${tx.teamName}</td>
-          <td class="p-2.5 text-center font-bold ${tx.type === '매수' ? 'text-rose-600' : 'text-blue-600'}">${tx.type}</td>
-          <td class="p-2.5 font-bold text-slate-800">${tx.stockName}</td>
-          <td class="p-2.5 text-right font-mono">${formatKRW(tx.price)}</td>
-          <td class="p-2.5 text-right font-mono">${tx.quantity}주</td>
-          <td class="p-2.5 text-right font-mono font-bold">${formatKRW(tx.totalAmount)}</td>
-          <td class="p-2.5 text-center font-bold text-[10px] ${tx.status === '성공' ? 'text-emerald-700' : 'text-rose-700'}">${tx.status}</td>
-          <td class="p-2.5 font-sans text-xs ${tx.status === '성공' ? 'text-slate-500' : 'text-rose-600 font-semibold'}">${tx.note}</td>
+          <td class="p-2.5 font-sans">${s.name}</td>
+          <td class="p-2.5 text-right font-bold text-slate-800">${qty}주</td>
+          <td class="p-2.5 text-right text-slate-600">${formatKRW(s.price)}</td>
+          <td class="p-2.5 text-right font-bold text-slate-900">${formatKRW(total)}</td>
         `;
         tbody.appendChild(tr);
       });
-
-      updateTxStats(transactions.length, successCount, failCount);
     }
 
-    function updateTxStats(total, success, fail) {
-      document.getElementById('statTotalTx').innerText = `${total}건`;
-      document.getElementById('statSuccessTx').innerText = `${success}건`;
-      document.getElementById('statFailedTx').innerText = `${fail}건`;
-      const rate = total > 0 ? ((fail / total) * 100).toFixed(1) : '0.0';
-      document.getElementById('statFailRate').innerText = `${rate}%`;
+    function initStockSelect() {
+      const sel = document.getElementById('selectStock');
+      const prevVal = sel.value;
+      sel.innerHTML = '';
+      stocks.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.innerText = `${s.name} (${s.category}) - ${formatKRW(s.price)}`;
+        sel.appendChild(opt);
+      });
+      if (prevVal) sel.value = prevVal;
     }
 
-    // 6. 시장 턴 진행 및 주가 변동 엔진
-    window.advanceMarketTick = async function() {
-      if (Math.random() < 0.45) {
-        const randomNews = marketNewsPool[Math.floor(Math.random() * marketNewsPool.length)];
-        document.getElementById('newsTickerText').innerText = randomNews.text;
+    function setOrderType(type) {
+      currentOrderType = type;
+      const bBuy = document.getElementById('btnBuy');
+      const bSell = document.getElementById('btnSell');
+      const bSub = document.getElementById('btnSubmitOrder');
 
-        if (randomNews.target) {
-          const targetStock = stocks.find(s => s.id === randomNews.target);
-          if (targetStock) {
-            targetStock.price = Math.round((targetStock.price * randomNews.impact) / 100) * 100;
-          }
+      if (type === 'BUY') {
+        bBuy.className = 'py-2.5 rounded-xl font-bold text-sm border-2 border-rose-500 bg-rose-50 text-rose-600 transition';
+        bSell.className = 'py-2.5 rounded-xl font-bold text-sm border-2 border-slate-200 bg-white text-slate-600 transition';
+        bSub.className = 'w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm shadow-md transition';
+        bSub.innerText = '매수 주문 전송하기';
+        document.getElementById('lblOrderAmount').innerText = '총 필요 현금:';
+      } else {
+        bSell.className = 'py-2.5 rounded-xl font-bold text-sm border-2 border-blue-500 bg-blue-50 text-blue-600 transition';
+        bBuy.className = 'py-2.5 rounded-xl font-bold text-sm border-2 border-slate-200 bg-white text-slate-600 transition';
+        bSub.className = 'w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md transition';
+        bSub.innerText = '매도 주문 전송하기';
+        document.getElementById('lblOrderAmount').innerText = '예상 환급액:';
+      }
+      updateOrderPreview();
+    }
+
+    document.getElementById('btnBuy').addEventListener('click', () => setOrderType('BUY'));
+    document.getElementById('btnSell').addEventListener('click', () => setOrderType('SELL'));
+
+    document.getElementById('btnPreset1').addEventListener('click', () => { document.getElementById('inputQty').value = 1; updateOrderPreview(); });
+    document.getElementById('btnPreset10').addEventListener('click', () => { document.getElementById('inputQty').value = 10; updateOrderPreview(); });
+    document.getElementById('btnPreset50').addEventListener('click', () => { document.getElementById('inputQty').value = 50; updateOrderPreview(); });
+    document.getElementById('btnPresetMax').addEventListener('click', () => {
+      if (!myTeamId) return;
+      const team = teams[myTeamId];
+      const stockId = document.getElementById('selectStock').value;
+      const stock = stocks.find(s => s.id === stockId);
+      if (!stock || !team) return;
+
+      if (currentOrderType === 'BUY') {
+        const max = Math.floor(team.cash / stock.price);
+        document.getElementById('inputQty').value = Math.max(1, max);
+      } else {
+        const holding = team.holdings?.[stockId] || 0;
+        document.getElementById('inputQty').value = Math.max(1, holding);
+      }
+      updateOrderPreview();
+    });
+
+    document.getElementById('selectStock').addEventListener('change', updateOrderPreview);
+    document.getElementById('inputQty').addEventListener('input', updateOrderPreview);
+
+    function updateOrderPreview() {
+      if (!myTeamId) return;
+      const team = teams[myTeamId];
+      const stockId = document.getElementById('selectStock').value;
+      const stock = stocks.find(s => s.id === stockId);
+      const qty = parseInt(document.getElementById('inputQty').value, 10) || 0;
+
+      if (!stock || !team) return;
+
+      document.getElementById('orderStockPrice').innerText = formatKRW(stock.price);
+      document.getElementById('orderStockHolding').innerText = `${team.holdings?.[stockId] || 0}주`;
+      document.getElementById('valOrderTotal').innerText = formatKRW(stock.price * qty);
+    }
+
+    // 6. 주문 전송 로직
+    document.getElementById('btnSubmitOrder').addEventListener('click', async () => {
+      if (!currentUser) return showToast('데이터베이스 연결 중입니다.', 'error');
+      if (!myTeamId) return showToast('조 배정이 완료되지 않았습니다.', 'error');
+
+      const team = teams[myTeamId];
+      const stockId = document.getElementById('selectStock').value;
+      const stock = stocks.find(s => s.id === stockId);
+      const qty = parseInt(document.getElementById('inputQty').value, 10);
+
+      if (!qty || qty <= 0) return showToast('수량을 1주 이상 입력하세요.', 'error');
+
+      const totalCost = stock.price * qty;
+      const curTime = document.getElementById('studentTimer').innerText;
+      let isSuccess = false;
+      let note = '정상 체결';
+
+      // 거래 유효성 검사
+      if (currentOrderType === 'BUY') {
+        if (team.cash >= totalCost) {
+          team.cash -= totalCost;
+          if (!team.holdings) team.holdings = {};
+          team.holdings[stockId] = (team.holdings[stockId] || 0) + qty;
+          isSuccess = true;
+        } else {
+          isSuccess = false;
+          note = `[실패] 잔액 부족 (부족액: ${formatKRW(totalCost - team.cash)})`;
+        }
+      } else {
+        const holding = team.holdings?.[stockId] || 0;
+        if (holding >= qty) {
+          team.cash += totalCost;
+          team.holdings[stockId] -= qty;
+          isSuccess = true;
+        } else {
+          isSuccess = false;
+          note = `[실패] 보유 수량 부족 (보유: ${holding}주, 주문: ${qty}주)`;
         }
       }
 
-      stocks.forEach(stock => {
-        const deltaRate = (Math.random() * 0.13) - 0.06;
-        let nextPrice = stock.price * (1 + deltaRate);
-        nextPrice = Math.max(1000, Math.round(nextPrice / 100) * 100);
+      if (isSuccess) {
+        const teamDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'teams', String(myTeamId));
+        await setDoc(teamDocRef, team);
+      }
 
-        stock.change = nextPrice - stock.basePrice;
-        stock.changeRate = ((nextPrice - stock.basePrice) / stock.basePrice) * 100;
-        stock.price = nextPrice;
+      const txCollRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+      await addDoc(txCollRef, {
+        timestamp: Date.now(),
+        time: curTime,
+        teamId: myTeamId,
+        teamName: `${myTeamId}조`,
+        type: currentOrderType === 'BUY' ? '매수' : '매도',
+        stockName: stock.name,
+        price: stock.price,
+        quantity: qty,
+        totalAmount: totalCost,
+        status: isSuccess ? '성공' : '실패',
+        note
       });
 
-      renderStocksGrid();
-      renderTeamRanks();
-      await saveMarketStateToDb();
-    };
-
-    function updateTimerButtonUI() {
-      const btn = document.getElementById('btnToggleTimer');
-      if (isTimerRunning) {
-        btn.innerText = '⏸ 일시 정지';
-        btn.className = 'px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow';
+      if (isSuccess) {
+        showToast(`[주문 체결] ${stock.name} ${qty}주 정상 체결되었습니다!`);
       } else {
-        btn.innerText = '▶ 투자 시작';
-        btn.className = 'px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold rounded-xl transition shadow';
+        showToast(`[거래 실패] ${note}`, 'error');
       }
+    });
+
+    function renderMyTxLogs() {
+      const box = document.getElementById('myTxLogs');
+      if (!myTeamId) return;
+      const myTxs = allTransactions.filter(t => t.teamId === myTeamId || t.teamName === `${myTeamId}조`);
+
+      if (myTxs.length === 0) {
+        box.innerHTML = '<div class="p-4 text-center text-slate-400 font-sans">아직 보낸 주문이 없습니다.</div>';
+        return;
+      }
+
+      box.innerHTML = '';
+      myTxs.forEach(t => {
+        const item = document.createElement('div');
+        item.className = `p-3 flex items-center justify-between ${t.status === '성공' ? 'bg-white' : 'bg-rose-50/70'}`;
+        item.innerHTML = `
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold ${t.type === '매수' ? 'text-rose-600' : 'text-blue-600'}">[${t.type}]</span>
+              <span class="font-bold text-slate-900">${t.stockName}</span>
+              <span class="text-slate-500">${t.quantity}주</span>
+              <span class="text-[10px] font-black px-1.5 py-0.2 rounded ${t.status === '성공' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${t.status}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-0.5">${t.time || ''} | ${t.note}</div>
+          </div>
+          <div class="text-right font-black text-slate-800">${formatKRW(t.totalAmount)}</div>
+        `;
+        box.appendChild(item);
+      });
     }
 
-    window.toggleTimer = function() {
-      if (isTimerRunning) {
-        clearInterval(timerInterval);
-        isTimerRunning = false;
-        updateTimerButtonUI();
-        saveMarketStateToDb();
-      } else {
-        isTimerRunning = true;
-        updateTimerButtonUI();
+    // 7. 강사 마스터 PIN 인증 모달 로직 (방식 3)
+    const pinModal = document.getElementById('teacherPinModal');
+    function openPinModal() {
+      document.getElementById('inputTeacherPin').value = '';
+      pinModal.classList.remove('hidden');
+    }
+    function closePinModal() {
+      pinModal.classList.add('hidden');
+    }
 
-        timerInterval = setInterval(async () => {
-          if (remainingSeconds > 0) {
-            remainingSeconds--;
-            document.getElementById('timerDisplay').innerText = formatTime(remainingSeconds);
+    document.getElementById('btnTeacherAuth').addEventListener('click', openPinModal);
+    document.getElementById('btnOpenPinModalFromWaiting').addEventListener('click', openPinModal);
+    document.getElementById('btnClosePinModal').addEventListener('click', closePinModal);
+    document.getElementById('btnCancelPin').addEventListener('click', closePinModal);
 
-            if (remainingSeconds % 30 === 0) {
-              await advanceMarketTick();
-            } else if (remainingSeconds % 5 === 0) {
-              await saveMarketStateToDb();
-            }
-
-            if (remainingSeconds === 0) {
-              clearInterval(timerInterval);
-              isTimerRunning = false;
-              updateTimerButtonUI();
-              saveMarketStateToDb();
-              showToast('20분 투자가 종료되었습니다! AI 결산 리포트를 실행하세요.');
-              openAiAnalysisModal();
-            }
-          }
-        }, 1000);
-        saveMarketStateToDb();
+    document.getElementById('btnApplyPinAssignment').addEventListener('click', async () => {
+      const pin = document.getElementById('inputTeacherPin').value;
+      if (pin !== MASTER_PIN) {
+        return showToast('마스터 PIN 번호가 일치하지 않습니다.', 'error');
       }
-    };
+      const selectedTeam = parseInt(document.getElementById('selectPinTeam').value, 10);
+      applyTeamAssignment(selectedTeam, '강사 PIN 직접 배정');
+      closePinModal();
+
+      // DB에도 업데이트 저장
+      if (currentUser) {
+        const deviceDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'devices', deviceId);
+        await setDoc(deviceDocRef, { deviceId, teamId: selectedTeam, lastActive: Date.now() }, { merge: true });
+      }
+    });
+
+    function formatKRW(val) {
+      return Number(val || 0).toLocaleString('ko-KR') + '원';
+    }
 
     function formatTime(sec) {
       const m = Math.floor(sec / 60).toString().padStart(2, '0');
       const s = (sec % 60).toString().padStart(2, '0');
       return `${m}:${s}`;
     }
-
-    function formatKRW(val) {
-      return Number(val || 0).toLocaleString('ko-KR') + '원';
-    }
-
-    // 7. 내보내기 기능
-    document.getElementById('btnCopyTSV').addEventListener('click', () => {
-      if (transactions.length === 0) return showToast('복사할 거래 데이터가 없습니다.', 'error');
-      const headers = ['거래ID', '체결시간', '조', '구분', '회사명', '단가', '수량', '총주문액', '결과', '비고'];
-      const rows = transactions.map((t, idx) => [
-        transactions.length - idx,
-        t.time || '',
-        t.teamName,
-        t.type,
-        t.stockName,
-        t.price,
-        t.quantity,
-        t.totalAmount,
-        t.status,
-        `"${(t.note || '').replace(/"/g, '""')}"`
-      ]);
-      const tsv = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
-
-      const ta = document.createElement('textarea');
-      ta.value = tsv;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      showToast('구글 시트용 데이터(TSV)가 클립보드에 복사되었습니다! (Ctrl+V)');
-    });
-
-    document.getElementById('btnDownloadCSV').addEventListener('click', () => {
-      if (transactions.length === 0) return showToast('다운로드할 데이터가 없습니다.', 'error');
-      const headers = ['거래ID', '체결시간', '조', '구분', '회사명', '단가', '수량', '총주문액', '결과', '비고'];
-      const rows = transactions.map((t, idx) => [
-        transactions.length - idx,
-        t.time || '',
-        t.teamName,
-        t.type,
-        t.stockName,
-        t.price,
-        t.quantity,
-        t.totalAmount,
-        t.status,
-        `"${(t.note || '').replace(/"/g, '""')}"`
-      ]);
-      const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `모의투자_거래원장_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click();
-      showToast('CSV 파일이 다운로드되었습니다.');
-    });
-
-    // 8. 초기화 커스텀 모달 제어 (alert/confirm 금지 준수)
-    const resetModal = document.getElementById('resetModalBackdrop');
-    document.getElementById('btnOpenResetModal').addEventListener('click', () => {
-      resetModal.classList.remove('hidden');
-    });
-    document.getElementById('btnCancelReset').addEventListener('click', () => {
-      resetModal.classList.add('hidden');
-    });
-    document.getElementById('btnConfirmReset').addEventListener('click', async () => {
-      resetModal.classList.add('hidden');
-      clearInterval(timerInterval);
-      isTimerRunning = false;
-      remainingSeconds = TOTAL_SECONDS;
-      document.getElementById('timerDisplay').innerText = '20:00';
-      updateTimerButtonUI();
-
-      stocks = JSON.parse(JSON.stringify(defaultStocks));
-      teams = JSON.parse(JSON.stringify(defaultTeams));
-      transactions = [];
-
-      renderStocksGrid();
-      renderTeamRanks();
-      renderTxTable();
-
-      await saveMarketStateToDb();
-      await saveAllTeamsToDb();
-      showToast('전체 게임이 초기화되었습니다.');
-    });
-
-    // 9. Gemini API 연동 (지수 백오프 5회 재시도)
-    async function callGemini(systemPrompt, userQuery) {
-      const delays = [1000, 2000, 4000, 8000, 16000];
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-      const payload = {
-        contents: [{ parts: [{ text: userQuery }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] }
-      };
-
-      for (let i = 0; i < 5; i++) {
-        try {
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          return data.candidates?.[0]?.content?.parts?.[0]?.text;
-        } catch (err) {
-          if (i === 4) throw err;
-          await new Promise(r => setTimeout(r, delays[i]));
-        }
-      }
-      throw new Error('Retries failed');
-    }
-
-    document.getElementById('btnAiBriefing').addEventListener('click', async () => {
-      const btn = document.getElementById('btnAiBriefing');
-      btn.disabled = true;
-      btn.innerText = '생성 중...';
-
-      try {
-        const info = stocks.map(s => `${s.name}: ${s.price}원 (${s.changeRate.toFixed(1)}%)`).join(', ');
-        const sys = "초등6학년 및 중학생 대상 모의투자 수업의 재치 있는 긴급 경제 뉴스 앵커. 이모지를 섞어 1문장의 박진감 넘치는 속보 헤드라인을 작성.";
-        const q = `현재 시세: [${info}]. 가장 인상적인 1종목을 골라 속보를 작성해 줘.`;
-        const news = await callGemini(sys, q);
-        document.getElementById('newsTickerText').innerText = news.trim();
-        await saveMarketStateToDb();
-        showToast('새로운 AI 속보가 학생 화면에 전송되었습니다.');
-      } catch (e) {
-        showToast('AI 뉴스 생성 실패', 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerText = '✨ AI 속보 전송';
-      }
-    });
-
-    const aiModal = document.getElementById('aiAnalysisModalBackdrop');
-    document.getElementById('btnOpenAiModal').addEventListener('click', () => {
-      aiModal.classList.remove('hidden');
-    });
-    document.getElementById('btnCloseAiModal').addEventListener('click', () => {
-      aiModal.classList.add('hidden');
-    });
-    document.getElementById('btnCloseAiModalBottom').addEventListener('click', () => {
-      aiModal.classList.add('hidden');
-    });
-
-    document.getElementById('btnStartAiAnalysis').addEventListener('click', async () => {
-      const btn = document.getElementById('btnStartAiAnalysis');
-      const loading = document.getElementById('aiLoadingIndicator');
-      const reportBox = document.getElementById('aiReportContainer');
-      const initialBox = document.getElementById('aiInitialPromptState');
-      const content = document.getElementById('aiReportContent');
-
-      btn.disabled = true;
-      initialBox.classList.add('hidden');
-      reportBox.classList.add('hidden');
-      loading.classList.remove('hidden');
-
-      const teamList = getSortedTeamList();
-      const promptData = {
-        totalTransactions: transactions.length,
-        teams: teamList.map(t => ({
-          name: t.name,
-          totalAsset: t.totalAsset,
-          cash: t.cash,
-          returnRate: t.returnRate.toFixed(1) + '%'
-        })),
-        recentTransactions: transactions.slice(0, 15)
-      };
-
-      const sys = `초등 6학년~중학생 대상 데이터 융합 교육 전문가이자 친절한 투자 코치.
-학생들이 알아듣기 쉽게 아래 3개 항목을 명확히 구조화하여 피드백:
-1. [순위 종합 평가]: 1위 조의 비결과 각 조의 포트폴리오 특징.
-2. [거래 횟수와 수익률]: 잦은 거래가 무조건 이득이었는지 데이터 기반 검증.
-3. [데이터 유효성(오류) 피드백]: '잔액 부족'과 '수량 부족' 등 컴퓨터 시스템에서 예외 처리가 중요한 이유 설명.`;
-
-      const q = `수업 거래 데이터:\n${JSON.stringify(promptData, null, 2)}\n\n우리 반 학생들을 위한 총평 리포트를 작성해 줘.`;
-
-      try {
-        const report = await callGemini(sys, q);
-        content.innerText = report;
-        loading.classList.add('hidden');
-        reportBox.classList.remove('hidden');
-        btn.disabled = false;
-      } catch (err) {
-        loading.classList.add('hidden');
-        initialBox.classList.remove('hidden');
-        btn.disabled = false;
-        showToast('리포트 생성에 실패했습니다.', 'error');
-      }
-    });
-
-    document.getElementById('btnCopyAiReport').addEventListener('click', () => {
-      const txt = document.getElementById('aiReportContent').innerText;
-      const ta = document.createElement('textarea');
-      ta.value = txt;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      showToast('AI 분석 리포트가 복사되었습니다.');
-    });
 
     function showToast(msg, type = 'success') {
       const toast = document.getElementById('toastNotification');
@@ -911,14 +805,9 @@
       }, 3000);
     }
 
-    // 초기 차트 및 버튼 이벤트 바인딩
-    initRankingChart();
-    renderStocksGrid();
-    renderTeamRanks();
-    renderTxTable();
-
-    document.getElementById('btnToggleTimer').addEventListener('click', () => window.toggleTimer());
-    document.getElementById('btnAdvanceTick').addEventListener('click', () => window.advanceMarketTick());
+    // 초기 실행
+    initStockSelect();
+    checkUrlAssignment();
   </script>
 </body>
 </html>
